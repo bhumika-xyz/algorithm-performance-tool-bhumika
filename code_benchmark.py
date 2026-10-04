@@ -41,34 +41,45 @@ MAX_INPUT = {
 # The four programs
 # ---------------------------------------------------------------------------
 def single_loop(n):
-    """Add up the numbers 0..n-1 with ONE loop. Time O(n), space O(1)."""
+    """Add up the numbers 0..n-1 with ONE loop. Time O(n), space O(1).
+    Returns (total, operations). operations = number of loop iterations."""
     total = 0
+    operations = 0
     for i in range(n):
         total += i
-    return total
+        operations += 1
+    return total, operations
 
 
 def nested_loop(n):
-    """Count the steps of a loop inside a loop. Returns n*n. Time O(n²), space O(1)."""
+    """Count the steps of a loop inside a loop. Time O(n²), space O(1).
+    Returns (count, operations). operations = number of inner-loop iterations (n*n)."""
     count = 0
+    operations = 0
     for i in range(n):
         for j in range(n):
             count += 1
-    return count
+            operations += 1
+    return count, operations
 
 
 def iterative_factorial(n):
-    """n! using a loop. Time O(n), space O(1) (extra memory, apart from the result)."""
+    """n! using a loop. Time O(n), space O(1) (extra memory, apart from the result).
+    Returns (result, operations). operations = number of multiplications."""
     if n < 0:
         raise ValueError("Factorial is not defined for negative numbers.")
     result = 1
+    operations = 0
     for i in range(2, n + 1):
         result *= i
-    return result
+        operations += 1
+    return result, operations
 
 
 def _factorial_recursive_step(n, depth, stats):
-    """Helper: n! by recursion. `stats` remembers the deepest level reached."""
+    """Helper: n! by recursion. `stats` remembers the deepest level reached
+    and the number of recursive calls made."""
+    stats["calls"] += 1
     if depth > stats["max_depth"]:
         stats["max_depth"] = depth
     if n <= 1:
@@ -91,7 +102,8 @@ def _temporary_recursion_limit(needed):
 def recursive_factorial_with_depth(n):
     """
     n! using recursion. Time O(n), space O(n) (one stack frame per call).
-    Returns (result, max_recursion_depth). The recursion limit is raised
+    Returns (result, operations, max_recursion_depth). operations = number of
+    recursive calls made. The recursion limit is raised
     temporarily so that n up to MAX_INPUT["Recursive Factorial"] works.
     """
     if n < 0:
@@ -100,10 +112,10 @@ def recursive_factorial_with_depth(n):
         raise ValueError(
             f"n is too large for recursion (maximum {MAX_INPUT['Recursive Factorial']}). "
             "Use Iterative Factorial for bigger values.")
-    stats = {"max_depth": 0}
+    stats = {"max_depth": 0, "calls": 0}
     with _temporary_recursion_limit(n + 100):
         result = _factorial_recursive_step(n, 1, stats)
-    return result, stats["max_depth"]
+    return result, stats["calls"], stats["max_depth"]
 
 
 def recursive_factorial(n):
@@ -149,20 +161,22 @@ def run_program(program, n):
     """
     Run one of the four programs with input n and measure it.
     Returns a dictionary: program, input_size, result (readable text),
-    execution_time (seconds), memory_usage (KB), max_recursion_depth (or None).
+    operations (operation count), execution_time (seconds), memory_usage (KB),
+    max_recursion_depth (or None).
     """
     validate_program_input(program, n)
     repeats = 1 if program == "Nested Loop" else 3     # nested loop can be slow
 
     raw, seconds, memory_kb = measure_function(PROGRAM_FUNCTIONS[program], (n,), repeats)
 
-    depth = None
-    if program == "Recursive Factorial":
-        raw, depth = raw
+    # every program returns (result, operations); recursive also returns its depth
+    depth = raw[2] if program == "Recursive Factorial" else None
+    result, operations = raw[0], raw[1]
     return {
         "program": program,
         "input_size": n,
-        "result": format_big_number(raw),
+        "result": format_big_number(result),
+        "operations": operations,
         "execution_time": seconds,
         "memory_usage": memory_kb,
         "max_recursion_depth": depth,
@@ -180,8 +194,10 @@ def run_loop_benchmark(sizes=None, include_slow=False, save=False):
     """
     sizes = sizes or DEFAULT_LOOP_SIZES
     engine = BenchmarkEngine(repeats=3)
-    engine.run("Single Loop", single_loop, sizes)
+    engine.run("Single Loop", single_loop, sizes,
+               extras=lambda result: {"operations": result[1]})
     engine.run("Nested Loop", nested_loop, sizes, repeats=1,
+               extras=lambda result: {"operations": result[1]},
                max_size=None if include_slow else NESTED_LOOP_SAFE_LIMIT)
     df = engine.get_dataframe()
     if save:
@@ -194,8 +210,10 @@ def run_factorial_benchmark(sizes=None, save=False):
     sizes = sizes or DEFAULT_FACTORIAL_SIZES
     engine = BenchmarkEngine(repeats=5)
     engine.run("Recursive Factorial", recursive_factorial_with_depth, sizes,
-               extras=lambda result: {"max_recursion_depth": result[1]})
-    engine.run("Iterative Factorial", iterative_factorial, sizes)
+               extras=lambda result: {"operations": result[1],
+                                      "max_recursion_depth": result[2]})
+    engine.run("Iterative Factorial", iterative_factorial, sizes,
+               extras=lambda result: {"operations": result[1]})
     df = engine.get_dataframe()
     if save:
         save_csv(df, "factorial_benchmark.csv")
@@ -208,10 +226,11 @@ if __name__ == "__main__":
                            ("Recursive Factorial", 10), ("Iterative Factorial", 10)]:
         info = run_program(program, value)
         print(f"{program}(n={value}): result={info['result']}, "
+              f"operations={info['operations']}, "
               f"time={info['execution_time']:.8f} s, memory={info['memory_usage']:.3f} KB")
 
     print("\nEdge cases:")
-    print("0! =", iterative_factorial(0), "| 1! =", recursive_factorial(1))
+    print("0! =", iterative_factorial(0)[0], "| 1! =", recursive_factorial(1))
     try:
         run_program("Iterative Factorial", -5)
     except ValueError as error:
