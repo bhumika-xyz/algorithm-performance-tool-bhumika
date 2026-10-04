@@ -134,6 +134,7 @@ def run_search(algorithm, n, key, sorted_data=True, repeats=5):
         "found": index != -1,
         "index": index,
         "comparisons": comparisons,
+        "operations": comparisons,
         "execution_time": seconds,
         "memory_usage": memory_kb,
         "data_preview": data[:10],
@@ -158,7 +159,7 @@ def run_search_benchmark(sizes=None, repeats=5, save=False):
         return generate_sorted_dataset(n), worst_case_key(n)
 
     def extras(result):
-        return {"comparisons": result[1]}
+        return {"operations": result[1], "comparisons": result[1]}
 
     for name in SEARCH_ALGORITHMS:
         engine.run(name, SEARCH_FUNCTIONS[name], sizes, setup=setup, extras=extras)
