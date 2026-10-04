@@ -100,6 +100,7 @@ with tab_code:
                 info = cb.run_program(program, int(value))
             st.success(f"Result: {info['result']}")
             show_run_metrics(info["execution_time"], info["memory_usage"])
+            st.metric("Number of operations", f"{info['operations']:,}")
             if info["max_recursion_depth"] is not None:
                 st.metric("Maximum recursion depth", info["max_recursion_depth"])
             theory = be.THEORETICAL_COMPLEXITY[program]
